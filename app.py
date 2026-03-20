@@ -2,85 +2,97 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. Setup the Page
-st.set_page_config(page_title="InsightStream Data Pro", layout="wide")
-st.title("📊 InsightStream Data Pro")
-st.markdown("Upload your data to visualize trends and explore your records instantly.")
+# 1. Page Config & Styling
+st.set_page_config(page_title="DataPro Dashboard", layout="wide", page_icon="📊")
 
-# 2. File Uploader
-uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=['csv', 'xlsx'])
+# Custom CSS for a cleaner look
+st.markdown("""
+    <style>
+    .main { background-color: #f8fafc; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    </style>
+    """, unsafe_content_code=True)
 
-if uploaded_file is not None:
+st.title("📊 DataPro Dashboard")
+
+# 2. Sidebar for File Upload & Global Settings
+with st.sidebar:
+    st.header("📁 Data Source")
+    uploaded_file = st.file_uploader("Upload CSV or Excel", type=['csv', 'xlsx'])
+    
+    if uploaded_file:
+        st.success("File uploaded!")
+        st.divider()
+        st.header("🛠️ Data Cleaning")
+        if st.button("🧼 Remove Missing Values"):
+            st.session_state.clean_data = True
+        if st.button("🔄 Reset Data"):
+            st.session_state.clean_data = False
+
+# 3. Main App Logic
+if uploaded_file:
     # Load Data
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-        
-        # 3. Show Data Summary Metrics
-        st.divider()
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Rows", len(df))
-        col2.metric("Total Columns", len(df.columns))
-        col3.metric("Missing Values", df.isna().sum().sum())
+    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+    
+    # Apply Cleaning if requested
+    if st.session_state.get('clean_data'):
+        df = df.dropna()
 
-        # 4. Interactive Charts Section
-        st.subheader("📈 Interactive Visualizations")
+    # Create Tabs
+    tab1, tab2, tab3 = st.tabs(["🏠 Overview", "📈 Visualizer", "🔍 Explorer"])
+
+    # --- TAB 1: OVERVIEW ---
+    with tab1:
+        st.subheader("Key Metrics")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Rows", len(df))
+        m2.metric("Columns", len(df.columns))
+        m3.metric("Numeric Columns", len(df.select_dtypes(include=['number']).columns))
+        m4.metric("Missing Cells", df.isna().sum().sum())
         
-        # Get numeric and categorical columns for selection
-        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        st.divider()
+        st.subheader("Column Types")
+        st.write(df.dtypes.to_frame().T)
+
+    # --- TAB 2: VISUALIZER ---
+    with tab2:
+        st.subheader("Chart Configuration")
         all_cols = df.columns.tolist()
+        num_cols = df.select_dtypes(include=['number']).columns.tolist()
 
-        if numeric_cols:
-            chart_col1, chart_col2 = st.columns(2)
-            
-            with chart_col1:
-                x_axis = st.selectbox("Select X-axis", all_cols)
-                y_axis = st.selectbox("Select Y-axis (Numeric)", numeric_cols)
-                chart_type = st.radio("Chart Type", ["Bar", "Line", "Scatter"], horizontal=True)
+        c1, c2, c3 = st.columns(3)
+        with c1: x_axis = st.selectbox("X-Axis", all_cols)
+        with c2: y_axis = st.selectbox("Y-Axis", num_cols)
+        with c3: chart_type = st.selectbox("Style", ["Bar", "Line", "Scatter", "Box", "Histogram"])
 
-            with chart_col2:
-                if chart_type == "Bar":
-                    fig = px.bar(df, x=x_axis, y=y_axis, title=f"{y_axis} by {x_axis}", color_discrete_sequence=['#3b82f6'])
-                elif chart_type == "Line":
-                    fig = px.line(df, x=x_axis, y=y_axis, title=f"{y_axis} Trend over {x_axis}")
-                else:
-                    fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}", color_discrete_sequence=['#ef4444'])
-                
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No numeric columns found to create charts.")
-
-        # 5. Data Explorer (Search and Filter)
-        st.divider()
-        st.subheader("🔍 Data Explorer")
+        color_by = st.selectbox("Color/Group By (Optional)", ["None"] + all_cols)
         
-        # Simple search box
-        search_term = st.text_input("Search in data:")
-        if search_term:
-            # Filter rows that contain the search term in any column
-            mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
-            filtered_df = df[mask]
-            st.write(f"Found {len(filtered_df)} matches:")
-            st.dataframe(filtered_df, use_container_width=True)
+        color_val = None if color_by == "None" else color_by
+
+        if chart_type == "Bar":
+            fig = px.bar(df, x=x_axis, y=y_axis, color=color_val, barmode="group", template="plotly_white")
+        elif chart_type == "Line":
+            fig = px.line(df, x=x_axis, y=y_axis, color=color_val, template="plotly_white")
+        elif chart_type == "Scatter":
+            fig = px.scatter(df, x=x_axis, y=y_axis, color=color_val, template="plotly_white")
+        elif chart_type == "Box":
+            fig = px.box(df, x=x_axis, y=y_axis, color=color_val, template="plotly_white")
         else:
-            st.dataframe(df, use_container_width=True)
+            fig = px.histogram(df, x=x_axis, y=y_axis, color=color_val, template="plotly_white")
 
-        # 6. Download Button
-        st.download_button(
-            label="📥 Download Data as CSV",
-            data=df.to_csv(index=False).encode('utf-8'),
-            file_name='exported_data.csv',
-            mime='text/csv',
-        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    except Exception as e:
-        st.error(f"Error loading file: {e}")
+    # --- TAB 3: EXPLORER ---
+    with tab3:
+        st.subheader("Search & Filter")
+        search = st.text_input("Type to search any value...")
+        
+        if search:
+            df = df[df.astype(str).apply(lambda x: x.str.contains(search, case=False)).any(axis=1)]
+        
+        st.dataframe(df, use_container_width=True)
+        
+        st.download_button("📥 Download Current View", df.to_csv(index=False), "data.csv", "text/csv")
 
 else:
-    # Welcome screen
-    st.info("👋 Welcome! Please upload a CSV or Excel file to begin your analysis.")
-    
-    # Example of what the app does
-    st.image("https://picsum.photos/seed/data/1200/400?blur=2", caption="Visualize your data instantly")
+    st.info("Please upload a file in the sidebar to get started.")
