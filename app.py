@@ -2,19 +2,24 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import google.generativeai as genai
-import os
 
 # 1. Setup the Page
 st.set_page_config(page_title="InsightStream AI", layout="wide")
 st.title("🚀 InsightStream AI")
-st.markdown("Upload your data and let AI find the hidden stories.")
 
-# 2. Sidebar for API Key
-with st.sidebar:
-    st.header("Settings")
-    api_key = st.text_input("Enter Gemini API Key", type="password")
-    if api_key:
+# 2. Setup API Key (Check Secrets first, then Sidebar)
+# If you put it in Streamlit Secrets, it will find it here.
+api_key = st.secrets.get("GEMINI_API_KEY") or st.sidebar.text_input("Enter Gemini API Key", type="password")
+
+if api_key:
+    try:
         genai.configure(api_key=api_key)
+        # Test if the key works by listing models (optional but good for debugging)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        st.sidebar.error(f"🔑 API Key Error: {e}")
+else:
+    st.sidebar.warning("⚠️ Please enter an API key to use AI features.")
 
 # 3. File Uploader
 uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=['csv', 'xlsx'])
@@ -32,34 +37,43 @@ if uploaded_file is not None:
     col2.metric("Total Columns", len(df.columns))
     col3.metric("Missing Values", df.isna().sum().sum())
 
-    # 5. Interactive Charts
-    st.subheader("📊 Data Visualization")
-    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+    # 5. AI Assistant Section
+    st.divider()
+    st.subheader("🤖 AI Data Assistant")
     
-    if numeric_cols:
-        selected_col = st.selectbox("Select a column to visualize", numeric_cols)
-        fig = px.histogram(df, x=selected_col, title=f"Distribution of {selected_col}", 
-                           color_discrete_sequence=['#3b82f6'])
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # 6. AI Insights (The "Magic" part)
-    if api_key:
-        st.subheader("🤖 AI Data Assistant")
-        user_question = st.text_input("Ask a question about your data:")
+    if not api_key:
+        st.info("Please enter your Gemini API Key in the sidebar to ask questions.")
+    else:
+        user_question = st.text_input("Ask a question about your data (e.g., 'What are the main trends?'):")
         
         if user_question:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            # Give the AI a "snippet" of the data to look at
-            data_summary = df.describe().to_string()
-            prompt = f"Here is a summary of my data:\n{data_summary}\n\nQuestion: {user_question}"
-            
-            with st.spinner("AI is thinking..."):
-                response = model.generate_content(prompt)
-                st.write(response.text)
-    else:
-        st.info("💡 Enter an API key in the sidebar to unlock AI insights!")
+            with st.spinner("AI is analyzing your data..."):
+                try:
+                    # We give the AI the first 5 rows and the summary stats
+                    data_context = f"""
+                    Data Summary:
+                    {df.describe().to_string()}
+                    
+                    First 5 rows of data:
+                    {df.head().to_string()}
+                    """
+                    
+                    prompt = f"You are a data analyst. Based on this data:\n{data_context}\n\nUser Question: {user_question}"
+                    
+                    response = model.generate_content(prompt)
+                    
+                    if response.text:
+                        st.markdown("### 💡 AI Response")
+                        st.write(response.text)
+                    else:
+                        st.warning("The AI returned an empty response. Try rephrasing your question.")
+                        
+                except Exception as e:
+                    st.error(f"❌ AI Error: {e}")
+                    st.info("Tip: Make sure your API key is correct and you have internet access.")
 
-    # 7. Data Explorer
+    # 6. Data Explorer
+    st.divider()
     st.subheader("🔍 Raw Data Explorer")
     st.dataframe(df)
 
