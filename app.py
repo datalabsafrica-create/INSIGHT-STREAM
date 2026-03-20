@@ -6,7 +6,6 @@ import plotly.express as px
 st.set_page_config(page_title="DataPro Dashboard", layout="wide", page_icon="📊")
 
 # Custom CSS for a cleaner look
-# FIXED: Changed unsafe_content_code to unsafe_allow_html
 st.markdown("""
     <style>
     .main { background-color: #f8fafc; }
@@ -16,25 +15,25 @@ st.markdown("""
 
 st.title("📊 DataPro Dashboard")
 
-# 2. Sidebar for File Upload & Global Settings
-with st.sidebar:
-    st.header("📁 Data Source")
-    uploaded_file = st.file_uploader("Upload CSV or Excel", type=['csv', 'xlsx'])
-    
-    if uploaded_file:
-        st.success("File uploaded!")
-        st.divider()
+# 2. Main Page File Upload (Moved out of the sidebar)
+st.header("📁 Step 1: Upload your Data")
+uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=['csv', 'xlsx'])
+
+# 3. Sidebar for Settings (Only shows up AFTER upload)
+if uploaded_file:
+    with st.sidebar:
         st.header("🛠️ Data Cleaning")
-        # We use session state to remember if we cleaned the data
         if "clean_data" not in st.session_state:
             st.session_state.clean_data = False
             
         if st.button("🧼 Remove Missing Values"):
             st.session_state.clean_data = True
+            st.rerun()
         if st.button("🔄 Reset Data"):
             st.session_state.clean_data = False
+            st.rerun()
 
-# 3. Main App Logic
+# 4. Main App Logic
 if uploaded_file:
     # Load Data
     try:
@@ -46,6 +45,9 @@ if uploaded_file:
         # Apply Cleaning if requested
         if st.session_state.clean_data:
             df = df.dropna()
+
+        st.divider()
+        st.header("📈 Step 2: Explore & Visualize")
 
         # Create Tabs
         tab1, tab2, tab3 = st.tabs(["🏠 Overview", "📈 Visualizer", "🔍 Explorer"])
@@ -110,4 +112,5 @@ if uploaded_file:
         st.error(f"Error loading file: {e}")
 
 else:
-    st.info("Please upload a file in the sidebar to get started.")
+    # Welcome screen
+    st.info("👋 Welcome! Please upload a CSV or Excel file above to begin your analysis.")
